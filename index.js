@@ -1,14 +1,52 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
+const { MongoClient, ServerApiVersion } = require('mongodb');
+const { router: postsRouter, setPostCollection, setCommentCollection } = require('./routes/posts.routes');
+
+const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors())
-app.use(express.json())
+app.use(cors());
+app.use(express.json());
 
-app.get('/', (req,res)=>{
-    req.send('Server i s running')
-})
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.dtv13jm.mongodb.net/?appName=Cluster0`;
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
+
+async function run() {
+  try {
+    await client.connect();
+    const db = client.db('brightTechDB');
+
+    const postCollection = db.collection('posts');
+    const commentCollection = db.collection('comments');
+
+    // Inject collections into routes
+    setPostCollection(postCollection);
+    setCommentCollection(commentCollection);
+
+    console.log('MongoDB connected successfully');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+  }
+}
+
+run().catch(console.dir);
+
+// Use routes
+app.use('/api/posts', postsRouter);
+
+app.get('/', (req, res) => {
+  res.send('Server running');
+});
 
 app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+  console.log(`Server running on http://localhost:${port}`);
 });
