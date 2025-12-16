@@ -3,8 +3,8 @@ const { ObjectId } = require('mongodb');
 const router = express.Router();
 const { verifyClerkToken } = require('../middlewares/verifyClerkToken');
 
-let postCollection; 
-let commentCollection; 
+let postCollection;
+let commentCollection;
 
 const setPostCollection = (collection) => {
   postCollection = collection;
@@ -16,6 +16,9 @@ const setCommentCollection = (collection) => {
 
 // Create Post
 router.post('/', verifyClerkToken, async (req, res) => {
+  // console.log('Headers:', req.headers);
+  // console.log('Token:', req.headers.authorization);
+
   try {
     const { title, content } = req.body;
 
@@ -29,6 +32,7 @@ router.post('/', verifyClerkToken, async (req, res) => {
     const newPost = {
       title,
       content,
+      image: req.body.image || '',
       author: { userId: req.user.userId, email: req.user.email },
       createdAt: new Date(),
       likeCount: 0,
@@ -217,6 +221,8 @@ router.get('/:id', async (req, res) => {
     });
   }
 });
+
+
 
 
 module.exports = { router, setPostCollection, setCommentCollection };
