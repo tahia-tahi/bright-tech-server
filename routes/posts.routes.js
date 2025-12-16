@@ -130,23 +130,48 @@ router.delete('/:postId', verifyClerkToken, async (req, res) => {
 router.patch('/like/:postId', verifyClerkToken, async (req, res) => {
   try {
     const postId = req.params.postId;
-    const userEmail = req.user.email;
+    const userId = req.user.userId;
 
     const post = await postCollection.findOne({ _id: new ObjectId(postId) });
-    if (!post) return res.status(404).send({ success: false, message: 'Post not found' });
+    if (!post) {
+      return res.status(404).send({ success: false, message: 'Post not found' });
+    }
 
-    const hasLiked = post.likes.includes(userEmail);
-    const update = hasLiked
-      ? { $pull: { likes: userEmail }, $inc: { likeCount: -1 } }
-      : { $addToSet: { likes: userEmail }, $inc: { likeCount: 1 } };
+    const hasLiked = post.likes.includes(userId);
 
-    await postCollection.updateOne({ _id: new ObjectId(postId) }, update);
-    res.send({ success: true, liked: !hasLiked });
+    let updatedLikeCount;
+
+    if (hasLiked) {
+      updatedLikeCount = Math.max(0, post.likeCount - 1);
+      await postCollection.updateOne(
+        { _id: new ObjectId(postId) },
+        {
+          $pull: { likes: userId },
+          $set: { likeCount: updatedLikeCount }
+        }
+      );
+    } else {
+      updatedLikeCount = post.likeCount + 1;
+      await postCollection.updateOne(
+        { _id: new ObjectId(postId) },
+        {
+          $addToSet: { likes: userId },
+          $set: { likeCount: updatedLikeCount }
+        }
+      );
+    }
+
+    res.send({
+      success: true,
+      liked: !hasLiked,
+      likeCount: updatedLikeCount
+    });
   } catch (error) {
     console.error(error);
     res.status(500).send({ success: false, message: 'Failed to update like' });
   }
 });
+
 
 // Add comment
 router.post('/comment/:postId', verifyClerkToken, async (req, res) => {
@@ -194,31 +219,27 @@ router.get('/comments/:postId', async (req, res) => {
 });
 
 // Get single post by ID (KEEP THIS LAST)
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyClerkToken, async (req, res) => {
   try {
     const id = req.params.id;
 
-    const post = await postCollection.findOne({
-      _id: new ObjectId(id)
-    });
-
+    const post = await postCollection.findOne({ _id: new ObjectId(id) });
     if (!post) {
-      return res.status(404).send({
-        success: false,
-        message: 'Post not found'
-      });
+      return res.status(404).send({ success: false, message: 'Post not found' });
     }
+
+    const liked = post.likes.includes(req.user.userId);
 
     res.send({
       success: true,
-      post
+      post: {
+        ...post,
+        liked
+      }
     });
   } catch (error) {
     console.error(error);
-    res.status(500).send({
-      success: false,
-      message: 'Failed to fetch post'
-    });
+    res.status(500).send({ success: false, message: 'Failed to fetch post' });
   }
 });
 
