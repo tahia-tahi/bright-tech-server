@@ -1,25 +1,31 @@
-const { verifyToken } = require("@clerk/clerk-sdk-node");
+const { verifyToken, clerkClient } = require("@clerk/clerk-sdk-node");
 
 const verifyClerkToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized - No token" });
-    }
+    if (!authHeader) return res.status(401).json({ message: "Unauthorized" });
 
     const token = authHeader.split(" ")[1];
-    const decoded = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+    const decoded = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+    });
+
+    const user = await clerkClient.users.getUser(decoded.sub);
 
     req.user = {
-      userId: decoded.sub,
-      email: decoded.email,
-      role: decoded.publicMetadata?.role || "user",
+      userId: user.id,
+      email: user.emailAddresses[0]?.emailAddress,
+      name: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      profileImage: user.profileImageUrl || "", 
+      role: user.publicMetadata?.role || "user",
     };
 
     next();
-  } catch (error) {
-    console.error("JWT verification failed:", error);
-    res.status(401).json({ message: "Invalid or expired token" });
+  } catch (err) {
+    console.error(err);
+    res.status(401).json({ message: "Invalid token" });
   }
 };
 

@@ -5,6 +5,7 @@ const { verifyClerkToken } = require('../middlewares/verifyClerkToken');
 
 let postCollection;
 let commentCollection;
+let userCollection;
 
 const setPostCollection = (collection) => {
   postCollection = collection;
@@ -13,6 +14,56 @@ const setPostCollection = (collection) => {
 const setCommentCollection = (collection) => {
   commentCollection = collection;
 };
+
+const setUserCollection = (collection) => {
+  userCollection = collection
+}
+
+// =======================
+// User Sync (Create if not exists)
+// POST /api/posts/user/sync
+// =======================
+router.post('/user/sync', verifyClerkToken, async (req, res) => {
+  console.log("REQ.USER:", req.user);
+  try {
+    const existingUser = await userCollection.findOne({
+      clerkId: req.user.userId,
+    });
+
+    if (existingUser) {
+      return res.send({
+        success: true,
+        user: existingUser,
+        message: 'User already exists',
+      });
+    }
+
+    const newUser = {
+      clerkId: req.user.userId,
+      email: req.user.email,
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      profileImage: req.user.profileImage,
+      role: req.user.role || 'user',
+      createdAt: new Date(),
+    };
+
+    const result = await userCollection.insertOne(newUser);
+
+    res.send({
+      success: true,
+      userId: result.insertedId,
+      message: 'User created successfully',
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: 'Failed to sync user',
+    });
+  }
+});
+
 
 // Create Post
 router.post('/', verifyClerkToken, async (req, res) => {
@@ -59,6 +110,30 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get logged-in user's posts
+router.get('/my-posts', verifyClerkToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const posts = await postCollection
+      .find({ 'author.userId': userId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send({
+      success: true,
+      posts,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: 'Failed to fetch user posts',
+    });
+  }
+});
+
+
 // Edit a post
 router.put('/:postId', verifyClerkToken, async (req, res) => {
   try {
@@ -79,7 +154,8 @@ router.put('/:postId', verifyClerkToken, async (req, res) => {
     }
 
     // Check if the logged-in user is the author
-    if (post.author.email !== req.user.email) {
+    // if (post.author.email !== req.user.email) 
+    if (post.author.userId !== req.user.userId) {
       return res.status(403).send({ success: false, message: "You cannot edit this post" });
     }
 
@@ -109,7 +185,8 @@ router.delete('/:postId', verifyClerkToken, async (req, res) => {
     if (!post) return res.status(404).send({ success: false, message: "Post not found" });
 
     // Only author can delete
-    if (post.author.email !== req.user.email) {
+    // if (post.author.email !== req.user.email)
+    if (post.author.userId !== req.user.userId) {
       return res.status(403).send({ success: false, message: "Forbidden: You cannot delete this post" });
     }
 
@@ -183,7 +260,11 @@ router.post('/comment/:postId', verifyClerkToken, async (req, res) => {
 
     const newComment = {
       postId: new ObjectId(postId),
-      user: { userId: req.user.userId, email: req.user.email },
+      user: {
+        userId: req.user.userId,
+        email: req.user.email,
+        name: req.user.name,
+      },
       text,
       createdAt: new Date(),
     };
@@ -246,4 +327,4 @@ router.get('/:id', verifyClerkToken, async (req, res) => {
 
 
 
-module.exports = { router, setPostCollection, setCommentCollection };
+module.exports = { router, setPostCollection, setCommentCollection, setUserCollection };
