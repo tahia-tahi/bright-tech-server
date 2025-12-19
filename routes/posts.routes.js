@@ -2,13 +2,13 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const router = express.Router();
 const { verifyClerkToken } = require('../middlewares/verifyClerkToken');
-const multer = require('multer'); 
+const multer = require('multer');
 
 
 let postCollection;
 let commentCollection;
 let userCollection;
-const storage = multer.memoryStorage(); 
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 const setPostCollection = (collection) => {
@@ -23,11 +23,6 @@ const setUserCollection = (collection) => {
   userCollection = collection
 }
 
-
-// =======================
-// User Sync (Create if not exists)
-// POST /api/posts/user/sync
-// =======================
 router.post('/user/sync', verifyClerkToken, async (req, res) => {
   console.log("REQ.USER:", req.user);
   try {
@@ -83,14 +78,14 @@ router.post('/', verifyClerkToken, async (req, res) => {
         message: "Title and content are required",
       });
     }
-const tags = req.body.tags?.map(tag => tag.toLowerCase()) || [];
+    const tags = req.body.tags?.map(tag => tag.toLowerCase()) || [];
 
     const newPost = {
       title,
       content,
       tags,
       image: req.body.image || '',
-      author: { userId: req.user.userId, email: req.user.email, name:req.user.name },
+      author: { userId: req.user.userId, email: req.user.email, name: req.user.name, image: req.user.profileImage },
       createdAt: new Date(),
       likeCount: 0,
       commentCount: 0,
@@ -390,6 +385,37 @@ router.get('/:id', verifyClerkToken, async (req, res) => {
     res.status(500).send({ success: false, message: 'Failed to fetch post' });
   }
 });
+
+router.get('/dashboard/overview', verifyClerkToken, async (req, res) => {
+  try {
+    const totalPosts = await postCollection.countDocuments();
+    const posts = await postCollection.find().toArray();
+    const totalLikes = posts.reduce((acc, post) => acc + (post.likeCount || 0), 0);
+
+    const totalComments = await commentCollection.countDocuments();
+
+    // Aggregate posts per tag
+    const postsPerTag = await postCollection.aggregate([
+      { $unwind: "$tags" },
+      { $group: { _id: "$tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]).toArray();
+
+    res.send({
+      success: true,
+      stats: {
+        totalPosts,
+        totalLikes,
+        totalComments,
+        postsPerTag
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: 'Failed to fetch dashboard stats' });
+  }
+});
+
 
 
 
