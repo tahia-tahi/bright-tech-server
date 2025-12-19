@@ -2,10 +2,14 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const router = express.Router();
 const { verifyClerkToken } = require('../middlewares/verifyClerkToken');
+const multer = require('multer'); 
+
 
 let postCollection;
 let commentCollection;
 let userCollection;
+const storage = multer.memoryStorage(); 
+const upload = multer({ storage });
 
 const setPostCollection = (collection) => {
   postCollection = collection;
@@ -18,6 +22,7 @@ const setCommentCollection = (collection) => {
 const setUserCollection = (collection) => {
   userCollection = collection
 }
+
 
 // =======================
 // User Sync (Create if not exists)
@@ -41,8 +46,7 @@ router.post('/user/sync', verifyClerkToken, async (req, res) => {
     const newUser = {
       clerkId: req.user.userId,
       email: req.user.email,
-      firstName: req.user.firstName,
-      lastName: req.user.lastName,
+      name: req.user.name,
       profileImage: req.user.profileImage,
       role: req.user.role || 'user',
       createdAt: new Date(),
@@ -79,12 +83,14 @@ router.post('/', verifyClerkToken, async (req, res) => {
         message: "Title and content are required",
       });
     }
+const tags = req.body.tags?.map(tag => tag.toLowerCase()) || [];
 
     const newPost = {
       title,
       content,
+      tags,
       image: req.body.image || '',
-      author: { userId: req.user.userId, email: req.user.email },
+      author: { userId: req.user.userId, email: req.user.email, name:req.user.name },
       createdAt: new Date(),
       likeCount: 0,
       commentCount: 0,
@@ -100,15 +106,59 @@ router.post('/', verifyClerkToken, async (req, res) => {
 });
 
 // Get all posts
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const posts = await postCollection.find().sort({ createdAt: -1 }).toArray();
-    res.send(posts);
+    const { search, sort, tag, page, limit } = req.query;
+
+    let query = {};
+    let sortOption = { createdAt: -1 };
+
+    // search
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { content: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // tag filter
+    if (tag) {
+      query.tags = tag;
+    }
+
+    // sort
+    if (sort === "popular") {
+      sortOption = { likeCount: -1 };
+    }
+
+    const pageNumber = Number(page) || 1;
+    const limitNumber = Number(limit) || 10;
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const posts = await postCollection
+      .find(query)
+      .sort(sortOption)
+      .skip(skip)
+      .limit(limitNumber)
+      .toArray();
+
+    const total = await postCollection.countDocuments(query);
+
+    res.send({
+      success: true,
+      total,
+      page: pageNumber,
+      posts,
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ success: false, message: 'Failed to fetch posts' });
+    res.status(500).send({
+      success: false,
+      message: "Failed to fetch posts",
+    });
   }
 });
+
 
 // Get logged-in user's posts
 router.get('/my-posts', verifyClerkToken, async (req, res) => {
@@ -135,42 +185,59 @@ router.get('/my-posts', verifyClerkToken, async (req, res) => {
 
 
 // Edit a post
-router.put('/:postId', verifyClerkToken, async (req, res) => {
+router.put('/:postId', verifyClerkToken, upload.single('image'), async (req, res) => {
   try {
     const { postId } = req.params;
-    const { title, content } = req.body;
+    const { title, content, tags } = req.body; // tags as comma separated string
+    const file = req.file;
 
+    // Validation
     if (!title || !content) {
-      return res.status(400).send({
-        success: false,
-        message: "Title and content are required",
-      });
+      return res.status(400).send({ success: false, message: "Title and content are required" });
     }
 
     // Find the post
     const post = await postCollection.findOne({ _id: new ObjectId(postId) });
-    if (!post) {
-      return res.status(404).send({ success: false, message: "Post not found" });
-    }
+    if (!post) return res.status(404).send({ success: false, message: "Post not found" });
 
-    // Check if the logged-in user is the author
-    // if (post.author.email !== req.user.email) 
+    // Only author can edit
     if (post.author.userId !== req.user.userId) {
       return res.status(403).send({ success: false, message: "You cannot edit this post" });
     }
 
-    // Update post
+    // Prepare update object
+    const updateObj = {
+      title,
+      content,
+      updatedAt: new Date(),
+      tags: tags ? tags.split(",").map(t => t.trim()).filter(t => t) : post.tags, // keep existing tags if not updated
+      image: post.image // default to existing image
+    };
+
+    // Handle new image
+    if (file) {
+      const path = `uploads/${Date.now()}-${file.originalname}`;
+      fs.writeFileSync(path, file.buffer);
+      updateObj.image = path;
+    }
+
+    // Update post in DB
     await postCollection.updateOne(
       { _id: new ObjectId(postId) },
-      { $set: { title, content, updatedAt: new Date() } }
+      { $set: updateObj }
     );
 
-    res.send({ success: true, message: "Post updated successfully" });
-  } catch (error) {
-    console.error(error);
+    // Return updated post
+    const updatedPost = await postCollection.findOne({ _id: new ObjectId(postId) });
+
+    res.send({ success: true, message: "Post updated successfully", post: updatedPost });
+
+  } catch (err) {
+    console.error(err);
     res.status(500).send({ success: false, message: "Failed to update post" });
   }
 });
+
 
 // Delete post
 router.delete('/:postId', verifyClerkToken, async (req, res) => {

@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
-const { router: postsRouter, setPostCollection, setCommentCollection,setUserCollection } = require('./routes/posts.routes');
+const { router: postsRouter, setPostCollection, setCommentCollection, setUserCollection } = require('./routes/posts.routes');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -28,6 +28,8 @@ async function run() {
     const postCollection = db.collection('posts');
     const commentCollection = db.collection('comments');
     const userCollection = db.collection('users')
+
+
 
     // Inject collections into routes
     setPostCollection(postCollection);
