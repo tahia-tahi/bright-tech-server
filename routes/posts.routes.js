@@ -361,31 +361,6 @@ router.get('/comments/:postId', async (req, res) => {
   }
 });
 
-// Get single post by ID (KEEP THIS LAST)
-router.get('/:id', verifyClerkToken, async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const post = await postCollection.findOne({ _id: new ObjectId(id) });
-    if (!post) {
-      return res.status(404).send({ success: false, message: 'Post not found' });
-    }
-
-    const liked = post.likes.includes(req.user.userId);
-
-    res.send({
-      success: true,
-      post: {
-        ...post,
-        liked
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ success: false, message: 'Failed to fetch post' });
-  }
-});
-
 router.get('/dashboard/overview', verifyClerkToken, async (req, res) => {
   try {
     const totalPosts = await postCollection.countDocuments();
@@ -416,8 +391,29 @@ router.get('/dashboard/overview', verifyClerkToken, async (req, res) => {
   }
 });
 
+// Get single post by ID (KEEP THIS LAST)
+router.get('/:id', verifyClerkToken, async (req, res) => {
+  try {
+    const id = req.params.id;
 
+    const post = await postCollection.findOne({ _id: new ObjectId(id) });
+    if (!post) {
+      return res.status(404).send({ success: false, message: 'Post not found' });
+    }
 
+    const liked = post.likes.includes(req.user.userId);
 
+    res.send({
+      success: true,
+      post: {
+        ...post,
+        liked
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: 'Failed to fetch post' });
+  }
+});
 
 module.exports = { router, setPostCollection, setCommentCollection, setUserCollection };
