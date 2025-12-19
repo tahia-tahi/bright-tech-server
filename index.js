@@ -10,7 +10,7 @@ const port = process.env.PORT || 3000;
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://bright-tech-client.vercel.app/"
+    "https://bright-tech-client.vercel.app"
   ],
   credentials: true
 }));
