@@ -1,13 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const dotenv = require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const { router: postsRouter, setPostCollection, setCommentCollection, setUserCollection } = require('./routes/posts.routes');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "https://frontend.vercel.app"
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.dtv13jm.mongodb.net/?appName=Cluster0`;
@@ -24,11 +30,9 @@ async function run() {
   try {
     await client.connect();
     const db = client.db('brightTechDB');
-
     const postCollection = db.collection('posts');
     const commentCollection = db.collection('comments');
     const userCollection = db.collection('users')
-
 
 
     // Inject collections into routes
@@ -41,7 +45,6 @@ async function run() {
     console.error('MongoDB connection error:', error);
   }
 }
-
 run().catch(console.dir);
 
 // Use routes
